@@ -6,6 +6,7 @@ import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.HistogramStatistics;
 import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.Metric;
+import org.apache.flink.metrics.MetricConfig;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.cloudwatchlogs.emf.logger.MetricsLogger;
 
 import java.util.Arrays;
@@ -21,6 +24,7 @@ import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 public class EmfMetricsReporterTest {
@@ -37,6 +41,45 @@ public class EmfMetricsReporterTest {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    void open_setsUpMetricsLoggers() {
+        // Arrange
+        final String application = "application";
+        final String hostIp = "hostIp";
+        final String loggerName = "loggerName";
+        final String namespace = "namespace";
+        final Logger logger = LoggerFactory.getLogger(loggerName);
+        final MetricConfig config = mock(MetricConfig.class);
+
+        when(config.getString(EmfMetricsReporter.APPLICATION_NAME_PROPERTY, "")).thenReturn(application);
+        when(config.getString(EmfMetricsReporter.HOST_IP_PROPERTY, "")).thenReturn(hostIp);
+        when(config.getString(EmfMetricsReporter.LOGGER_NAME, "")).thenReturn(loggerName);
+        when(config.getString(EmfMetricsReporter.NAMESPACE_PROPERTY, "")).thenReturn(namespace);
+
+        // Act
+        final EmfMetricsReporter reporter = new EmfMetricsReporter();
+        reporter.open(config);
+    }
+
+    @Test
+    void open_setsUpMetricsLoggers_exception() {
+        // Arrange
+        final String application = "";
+        final String hostIp = "";
+        final String loggerName = "";
+        final String namespace = "";
+        final MetricConfig config = mock(MetricConfig.class);
+
+        when(config.getString(EmfMetricsReporter.APPLICATION_NAME_PROPERTY, "")).thenReturn(application);
+        when(config.getString(EmfMetricsReporter.HOST_IP_PROPERTY, "")).thenReturn(hostIp);
+        when(config.getString(EmfMetricsReporter.LOGGER_NAME, "")).thenReturn(loggerName);
+        when(config.getString(EmfMetricsReporter.NAMESPACE_PROPERTY, "")).thenReturn(namespace);
+
+        // Act
+        final EmfMetricsReporter reporter = new EmfMetricsReporter();
+        assertThrows(RuntimeException.class, () -> reporter.open(config));
     }
 
     @Test
@@ -82,7 +125,6 @@ public class EmfMetricsReporterTest {
     public void testReportMeter() throws Exception {
         // Arrange
         final String rawName = "rawName";
-        final String expectedMetricName = "extractedMetricName";
         final double meterRate = 4.56;
         final Meter meter = mock(Meter.class);
         when(meter.getRate()).thenReturn(meterRate);
@@ -114,4 +156,53 @@ public class EmfMetricsReporterTest {
 
         reporter.close();
     }
+
+    @Test
+    void testExtractMetricName_JobManager_StatusComponent() {
+        final String fullMetricName = "some.jobmanager.Status.some.metric.name";
+        final String expected = "jobmanager.some.metric.name";
+        final String actual = EmfMetricsReporter.extractMetricName(fullMetricName);
+        assertThat(actual, equalTo(expected));
+    }
+
+    @Test
+    void testExtractMetricName_TaskManager_StatusComponent() {
+        final String fullMetricName = "some.taskmanager.other.Status.some.metric.name";
+        final String expected = "taskmanager.some.metric.name";
+        final String actual = EmfMetricsReporter.extractMetricName(fullMetricName);
+        assertThat(actual, equalTo(expected));
+    }
+
+    @Test
+    void testExtractMetricName_TaskManager_OtherComponent() {
+        final String fullMetricName = "some.taskmanager.port.job.stage.shard.metric";
+        final String expected = "stage.metric";
+        final String actual = EmfMetricsReporter.extractMetricName(fullMetricName);
+        assertThat(actual, equalTo(expected));
+    }
+
+    @Test
+    void testExtractMetricName_SingleComponent() {
+        final String fullMetricName = "singleComponent";
+        final String expected = "singleComponent";
+        final String actual = EmfMetricsReporter.extractMetricName(fullMetricName);
+        assertThat(actual, equalTo(expected));
+    }
+
+    @Test
+    void testExtractMetricName_MultipleComponents_NoSpecialCase() {
+        final String fullMetricName = "some.prefix.other.metric.name";
+        final String expected = "name";
+        final String actual = EmfMetricsReporter.extractMetricName(fullMetricName);
+        assertThat(actual, equalTo(expected));
+    }
+
+    @Test
+    void testExtractMetricName_EmptyString() {
+        final String fullMetricName = "";
+        final String expected = "";
+        final String actual = EmfMetricsReporter.extractMetricName(fullMetricName);
+        assertThat(actual, equalTo(expected));
+    }
+
 }

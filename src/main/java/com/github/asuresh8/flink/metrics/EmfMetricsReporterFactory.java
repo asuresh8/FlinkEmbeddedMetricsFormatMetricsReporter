@@ -22,50 +22,18 @@ import org.apache.flink.metrics.reporter.MetricReporter;
 import org.apache.flink.metrics.reporter.MetricReporterFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.cloudwatchlogs.emf.logger.MetricsLogger;
-import software.amazon.cloudwatchlogs.emf.model.DimensionSet;
 
-import java.util.List;
 import java.util.Properties;
 
 public class EmfMetricsReporterFactory implements MetricReporterFactory {
 
     private static final Logger LOG = LoggerFactory.getLogger(EmfMetricsReporterFactory.class);
 
-    static final String APPLICATION_NAME_PROPERTY = "applicationName";
-    static final String HOST_IP_PROPERTY = "hostIp";
-
-    static final String LOGGER_NAME = "loggerName";
-    static final String NAMESPACE_PROPERTY = "namespace";
+    public EmfMetricsReporterFactory() {}
 
     @Override
     public MetricReporter createMetricReporter(final Properties properties) {
-        final String application = properties.getProperty(APPLICATION_NAME_PROPERTY, "");
-        final String hostIp = properties.getProperty(HOST_IP_PROPERTY, "");
-        final String loggerName = properties.getProperty(LOGGER_NAME, "");
-        final String namespace = properties.getProperty(NAMESPACE_PROPERTY, "");
-
-        final Logger logger = LoggerFactory.getLogger(loggerName);
-        final Slf4jSink metricLoggerSink = new Slf4jSink(logger);
-        final FlinkEnvironment metricLoggerEnvironment = new FlinkEnvironment(metricLoggerSink);
-
-        final MetricsLogger metricsLoggerWithApplicationDimension = new MetricsLogger(metricLoggerEnvironment);
-        final MetricsLogger metricsLoggerWithApplicationAndHostDimensions = new MetricsLogger(metricLoggerEnvironment);
-        try {
-            metricsLoggerWithApplicationDimension.setNamespace(namespace);
-            metricsLoggerWithApplicationAndHostDimensions.setNamespace(namespace);
-            metricsLoggerWithApplicationDimension.setDimensions(DimensionSet.of("Application", application));
-            metricsLoggerWithApplicationAndHostDimensions.setDimensions(
-                DimensionSet.of("Application", application, "HostIp", hostIp));
-        } catch (final Exception e) {
-            LOG.error("Failed to set namespace and dimensions on metrics logger");
-            throw new RuntimeException(e);
-        }
-
-        return new EmfMetricsReporter(List.of(
-            metricsLoggerWithApplicationDimension,
-            metricsLoggerWithApplicationAndHostDimensions
-        ));
+        return new EmfMetricsReporter();
     }
 
 }
